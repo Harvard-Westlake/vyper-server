@@ -35,6 +35,11 @@ async def handle(request):
     return web.Response(text='Vyper Compiler. Version: {} \n'.format(vyper.__version__))
 
 def _compile(data):
+    # Add debug information about Vyper
+    logging.debug(f"Vyper version: {vyper.__version__}")
+    from inspect import signature
+    logging.debug(f"compile_code signature: {signature(compile_code)}")
+    
     # Ensure the "sources" key exists and has at least one file.
     if "sources" not in data:
         return {"status": "failed", "message": "Missing sources key"}, 400
@@ -43,6 +48,9 @@ def _compile(data):
 
     # Grab the first file from the sources.
     first_source_key, first_source_value = next(iter(data['sources'].items()))
+    logging.debug(f"Source key (contract_path): {first_source_key}")
+    logging.debug(f"Source value: {first_source_value}")
+    
     code = first_source_value.get("content", "")
     if not code:
         return {"status": "failed", "message": "No code provided in sources"}, 400
@@ -50,15 +58,21 @@ def _compile(data):
         return {"status": "failed", "message": "Code must be a non-empty string"}, 400
 
     try:
+        # Log the parameters being passed to compile_code
+        logging.debug(f"Compiling code with contract_path: {first_source_key}")
+        
         # Compile the code; request extra outputs as needed.
         out_dict = compile_code(
-            code, 
-            ['abi', 'bytecode', 'bytecode_runtime', 'ir', 'method_identifiers'],
-            contract_path=first_source_key
+            code,  # first argument: source_code
+            first_source_key,  # second argument: contract_path
+            output_formats=['abi', 'bytecode', 'bytecode_runtime', 'ir', 'method_identifiers']
         )
+        logging.debug(f"Compilation successful. Output keys: {out_dict.keys()}")
+        
         # Convert the IR to a string (if needed)
         out_dict['ir'] = str(out_dict['ir'])
     except VyperException as e:
+        logging.error(f"Compilation failed with error: {str(e)}")
         col_offset, lineno = None, None
         if hasattr(e, "col_offset") and hasattr(e, "lineno"):
             col_offset, lineno = e.col_offset, e.lineno
