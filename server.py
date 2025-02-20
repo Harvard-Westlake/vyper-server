@@ -52,69 +52,63 @@ def _compile(data):
     logging.debug(f"Source value: {first_source_value}")
     
     code = first_source_value.get("content", "")
-    if not code:
-        return {"status": "failed", "message": "No code provided in sources"}, 400
-    if not isinstance(code, str):
-        return {"status": "failed", "message": "Code must be a non-empty string"}, 400
-
+    
     try:
-        # Log the parameters being passed to compile_code
-        logging.debug(f"Compiling code with contract_path: {first_source_key}")
-        
-        # Compile the code; request extra outputs as needed.
         out_dict = compile_code(
-            code,  # first argument: source_code
-            first_source_key,  # second argument: contract_path
-            output_formats=['abi', 'bytecode', 'bytecode_runtime', 'ir', 'method_identifiers']
+            code,
+            first_source_key,
+            output_formats=['abi', 'bytecode', 'bytecode_runtime', 'source_map', 'method_identifiers']
         )
-        logging.debug(f"Compilation successful. Output keys: {out_dict.keys()}")
+        # Create the artifact object with the expected structure
+        artifact = {
+            "manifest": "ethpm/3",
+            "name": None,
+            "version": None,
+            "meta": None,
+            "sources": {
+                first_source_key: {
+                    "content": code,
+                    "urls": [],
+                    "checksum": None,
+                    "type": None,
+                    "license": None,
+                    "references": None,
+                    "imports": None
+                }
+            },
+            "contractTypes": {
+                first_source_key.split('/')[-1].split('.')[0]: {  # Extract contract name from path
+                    "contractName": first_source_key.split('/')[-1].split('.')[0],
+                    "sourceId": first_source_key,
+                    "deploymentBytecode": {
+                        "bytecode": out_dict.get("bytecode", ""),
+                        "linkReferences": None,
+                        "linkDependencies": None
+                    },
+                    "runtimeBytecode": {
+                        "bytecode": out_dict.get("bytecode_runtime", ""),
+                        "linkReferences": None,
+                        "linkDependencies": None
+                    },
+                    "abi": out_dict.get("abi", []),
+                    "sourcemap": out_dict.get("source_map", ""),
+                    "methodIdentifiers": out_dict.get("method_identifiers", {})
+                }
+            },
+            "compilers": None,
+            "deployments": None,
+            "buildDependencies": None
+        }
         
-        # Convert the IR to a string (if needed)
-        out_dict['ir'] = str(out_dict['ir'])
+        return artifact, 200
+        
     except VyperException as e:
-        logging.error(f"Compilation failed with error: {str(e)}")
-        col_offset, lineno = None, None
-        if hasattr(e, "col_offset") and hasattr(e, "lineno"):
-            col_offset, lineno = e.col_offset, e.lineno
-        elif e.annotations and len(e.annotations) > 0:
-            ann = e.annotations[0]
-            col_offset, lineno = ann.col_offset, ann.lineno
-        return {
-            'status': 'failed',
-            'message': str(e),
-            'column': col_offset,
-            'line': lineno
-        }, 400
-
-    # Derive a contract name from the filename (e.g. "ERC20" from "examples/tokens/ERC20.vy")
-    contract_name = (first_source_key.split('/')[-1].split('.')[0]
-                     if '.' in first_source_key else "Contract")
-
-    # Build the artifact in the requested format.
-    artifact = {
-        "manifest": "ethpm/3",
-        "name": None,
-        "version": None,
-        "meta": None,
-        "sources": data["sources"],
-        "contractTypes": {
-            contract_name: {
-                "contractName": contract_name,
-                "sourceId": first_source_key,
-                "deploymentBytecode": {"bytecode": out_dict.get("bytecode", "")},
-                "runtimeBytecode": {"bytecode": out_dict.get("bytecode_runtime", "")},
-                "abi": out_dict.get("abi", []),
-                "sourcemap": out_dict.get("sourcemap", "")
-            }
-        },
-        "pcmap": out_dict.get("pcmap", {}),  # default empty if not provided
-        "dev_messages": {},
-        "ast": out_dict.get("ast", {}),        # default empty if not provided
-        "userdoc": {},
-        "devdoc": {},
-        "methodIdentifiers": out_dict.get("method_identifiers", {})
-    }
-    return artifact, 200
+        error_msg = str(e)
+        return {"status": "failed", "message": error_msg}, 400
+    except Exception as e:
+        error_msg = str(e)
+        logging.error(f"Unexpected error during compilation: {error_msg}")
+        return {"status": "failed", "message": "Internal compilation error"}, 500
 
 @routes.options('/compile')
 async def compile_it_options(request):
