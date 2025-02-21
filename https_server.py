@@ -108,23 +108,39 @@ async def compile_it(request):
         'status': 'SUCCESS' if status == 200 else 'FAILURE',
         'data': out
     }
-    return web.json_response(unique_id, status=status)
+    response = web.json_response(unique_id, status=status)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 @routes.get('/status/{id}')
 async def check_status(request):
     comp_id = request.match_info['id']
     if comp_id in compilation_results:
-        return web.Response(text=compilation_results[comp_id]['status'], status=200)
+        response = web.Response(text=compilation_results[comp_id]['status'], status=200)
     else:
-        return web.Response(text="NOT FOUND", status=404)
+        response = web.Response(text="NOT FOUND", status=404)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 @routes.get('/artifacts/{id}')
 async def get_artifacts(request):
     comp_id = request.match_info['id']
     if comp_id in compilation_results:
-        return web.json_response(compilation_results[comp_id]['data'], status=200)
+        response = web.json_response(compilation_results[comp_id]['data'], status=200)
     else:
-        return web.Response(text="NOT FOUND", status=404)
+        response = web.Response(text="NOT FOUND", status=404)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+# Also add an OPTIONS route handler for preflight requests
+@routes.options('/{tail:.*}')
+async def options_handler(request):
+    response = web.Response()
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
+    response.headers['Access-Control-Allow-Headers'] = '*'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    return response
 
 def main():
     # Configure aiohttp to use charset-normalizer instead of cchardet
@@ -136,8 +152,8 @@ def main():
         "*": ResourceOptions(
             allow_credentials=True,
             expose_headers="*",
-            allow_headers=["Content-Type", "X-Requested-With"],
-            allow_methods=["POST", "GET", "OPTIONS"],
+            allow_headers="*",  # Allow all headers
+            allow_methods=["POST", "GET", "OPTIONS", "PUT", "DELETE"],
             max_age=86400
         )
     })
