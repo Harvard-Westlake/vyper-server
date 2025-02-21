@@ -13,25 +13,10 @@ from vyper.exceptions import VyperException
 from concurrent.futures import ThreadPoolExecutor
 
 routes = web.RouteTableDef()
-headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
-    "Access-Control-Max-Age": "86400",
-}
 executor_pool = ThreadPoolExecutor(max_workers=4)
 
 # Global dictionary for storing compilation results.
 compilation_results = {}
-
-@routes.options('/{tail:.*}')
-async def options_handler(request):
-    return web.Response(headers={
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Max-Age': '86400',
-    })
 
 @routes.get('/')
 async def handle(request):
@@ -113,52 +98,47 @@ def _compile(data):
         logging.error(f"Unexpected error during compilation: {error_msg}")
         return {"status": "failed", "message": "Internal compilation error"}, 500
 
-@routes.options('/compile')
-async def compile_it_options(request):
-    return web.json_response(status=200, headers=headers)
-
 @routes.post('/compile')
 async def compile_it(request):
     data = await request.json()
     loop = asyncio.get_event_loop()
     out, status = await loop.run_in_executor(executor_pool, _compile, data)
-    # Generate a unique id similar to a temporary hash (with a "tmp" prefix)
     unique_id = "tmp" + str(uuid.uuid4())[:10]
-    # Store the result with a status based on the compilation outcome.
     compilation_results[unique_id] = {
         'status': 'SUCCESS' if status == 200 else 'FAILURE',
         'data': out
     }
-    return web.json_response(unique_id, status=status, headers=headers)
+    return web.json_response(unique_id, status=status)
 
 @routes.get('/status/{id}')
 async def check_status(request):
     comp_id = request.match_info['id']
     if comp_id in compilation_results:
-        return web.Response(text=compilation_results[comp_id]['status'], status=200, headers=headers)
+        return web.Response(text=compilation_results[comp_id]['status'], status=200)
     else:
-        return web.Response(text="NOT FOUND", status=404, headers=headers)
+        return web.Response(text="NOT FOUND", status=404)
 
 @routes.get('/artifacts/{id}')
 async def get_artifacts(request):
     comp_id = request.match_info['id']
     if comp_id in compilation_results:
-        return web.json_response(compilation_results[comp_id]['data'], status=200, headers=headers)
+        return web.json_response(compilation_results[comp_id]['data'], status=200)
     else:
-        return web.Response(text="NOT FOUND", status=404, headers=headers)
+        return web.Response(text="NOT FOUND", status=404)
 
 def main():
     # Configure aiohttp to use charset-normalizer instead of cchardet
     ClientResponse._get_charset = lambda self: None
     app = web.Application()
     
-    # Setup CORS
+    # Setup CORS with more specific configuration
     cors = cors_setup(app, defaults={
         "*": ResourceOptions(
             allow_credentials=True,
             expose_headers="*",
-            allow_headers="*",
-            allow_methods="*"
+            allow_headers=["Content-Type", "X-Requested-With"],
+            allow_methods=["POST", "GET", "OPTIONS"],
+            max_age=86400
         )
     })
     
