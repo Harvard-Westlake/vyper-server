@@ -109,7 +109,6 @@ async def compile_it(request):
         'data': out
     }
     response = web.json_response(unique_id, status=status)
-    response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 @routes.get('/status/{id}')
@@ -119,7 +118,6 @@ async def check_status(request):
         response = web.Response(text=compilation_results[comp_id]['status'], status=200)
     else:
         response = web.Response(text="NOT FOUND", status=404)
-    response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 @routes.get('/artifacts/{id}')
@@ -129,17 +127,6 @@ async def get_artifacts(request):
         response = web.json_response(compilation_results[comp_id]['data'], status=200)
     else:
         response = web.Response(text="NOT FOUND", status=404)
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response
-
-# Also add an OPTIONS route handler for preflight requests
-@routes.options('/{tail:.*}')
-async def options_handler(request):
-    response = web.Response()
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
-    response.headers['Access-Control-Allow-Headers'] = '*'
-    response.headers['Access-Control-Max-Age'] = '86400'
     return response
 
 def main():
